@@ -189,12 +189,8 @@ async def listen_live_feed():
                         if not clean_username:
                             continue
 
-                        # Kesin Elmas Tespiti
+                        # Elmas Tespiti
                         coins = get_chest_coins(payload, envelope_info)
-
-                        # --- KESİN FİLTRE: 30 ELMAS VE ÜZERİ (30'DAN KÜÇÜKSE ATLAR) ---
-                        if coins < 30:
-                            continue
 
                         taken = await asyncio.to_thread(is_already_taken_by_other_bot, clean_username)
                         if taken:
@@ -234,7 +230,7 @@ async def listen_live_feed():
                         )
 
                         asyncio.create_task(send_telegram(mesaj))
-                        print(f"HAZİNE (>=30): @{clean_username} | Elmas: {coins} | Dağıtılan: {recipients_text}")
+                        print(f"HAZİNE: @{clean_username} | Elmas: {coins} | Dağıtılan: {recipients_text}")
 
         except Exception as e:
             print(f"Bağlantı hatası: {e}")
