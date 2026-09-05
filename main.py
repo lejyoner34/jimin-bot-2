@@ -21,10 +21,10 @@ def run_dummy_server():
     server = HTTPServer(("0.0.0.0", port), SimpleHTTPRequestHandler)
     server.serve_forever()
 
-# Genel Ayarlar (Gizli bilgiler Render ortam değişkenlerinden çekilir)
+# Genel Ayarlar (18 Bin Yayın Taraması Ayarlandı)
 TELEGRAM_BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
-PROXY_URL = "https://dichvu321.com/proxy.php?stream=all&live=5000"
+PROXY_URL = "https://dichvu321.com/proxy.php?stream=all&live=18000"
 
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Linux; Android 10; Mobile) AppleWebKit/537.36",
@@ -65,7 +65,7 @@ def to_int(value):
         if value is None or isinstance(value, bool):
             return None
         number = int(value)
-        if 0 <= number <= 10000:
+        if 0 <= number <= 100000:
             return number
     except Exception:
         pass
@@ -172,16 +172,24 @@ async def listen_live_feed():
                         if not clean_username:
                             continue
 
-                        taken = await asyncio.to_thread(is_already_taken_by_other_bot, clean_username)
-                        if taken:
-                            continue
-
-                        coins = (
-                            payload.get("coins")
+                        # Elmas Tespiti
+                        coins = int(
+                            envelope_info.get("totalDiamondCount")
                             or envelope_info.get("diamondCount")
+                            or envelope_info.get("coinCount")
+                            or payload.get("totalCoins")
+                            or payload.get("coins")
                             or payload.get("diamondCount")
                             or 0
                         )
+
+                        # --- 50 ELMAS ALTINI ATLA ---
+                        if coins < 50:
+                            continue
+
+                        taken = await asyncio.to_thread(is_already_taken_by_other_bot, clean_username)
+                        if taken:
+                            continue
 
                         level = payload.get("level", 0)
                         try:
