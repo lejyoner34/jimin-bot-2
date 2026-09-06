@@ -9,10 +9,13 @@ import websockets
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-# Render Environment Variables
+# Render Ortam Değişkenleri
 TELEGRAM_BOT_TOKEN = (os.getenv("BOT_TOKEN") or "").strip()
 CHAT_ID = (os.getenv("CHAT_ID") or "").strip()
-MIN_COINS = int(os.getenv("MIN_COINS", "5"))
+MIN_COINS = int((os.getenv("MIN_COINS") or "5").strip())
+
+UPSTASH_URL = (os.getenv("UPSTASH_REDIS_REST_URL") or "").strip().rstrip("/")
+UPSTASH_TOKEN = (os.getenv("UPSTASH_REDIS_REST_TOKEN") or "").strip()
 
 BASE_URL = "https://dichvu321.com"
 PAGE_URL = f"{BASE_URL}/en/tiktok-treasure-box-bot/"
@@ -46,7 +49,7 @@ FETCH_HEADERS = {
     "Sec-Fetch-Site": "same-origin"
 }
 
-PROCESSED_KEYS = set()
+LOCAL_KEYS = set()
 
 # Render Web Service port kontrolü için HTTP sunucu
 class HealthHandler(BaseHTTPRequestHandler):
@@ -61,6 +64,25 @@ def run_dummy_server():
     port = int(os.getenv("PORT", 8080))
     server = HTTPServer(("0.0.0.0", port), HealthHandler)
     server.serve_forever()
+
+def is_seen(key):
+    if key in LOCAL_KEYS:
+        return True
+
+    if UPSTASH_URL and UPSTASH_TOKEN:
+        try:
+            req_url = f"{UPSTASH_URL}/set/{key}/1/nx/ex/86400"
+            headers = {"Authorization": f"Bearer {UPSTASH_TOKEN}"}
+            res = requests.get(req_url, headers=headers, timeout=3).json()
+            if res.get("result") is None:
+                return True
+        except Exception as e:
+            logging.error(f"Redis Hatası: {e}")
+
+    LOCAL_KEYS.add(key)
+    if len(LOCAL_KEYS) > 10000:
+        LOCAL_KEYS.clear()
+    return False
 
 def send_telegram(mesaj):
     if not TELEGRAM_BOT_TOKEN or not CHAT_ID:
@@ -104,7 +126,7 @@ async def connect_ws(ws_url, ws_headers):
             return await websockets.connect(ws_url, ping_interval=20, ping_timeout=20)
 
 async def run_bot():
-    send_telegram("🚀 <b>TikTok Sandık Botu Devrede!</b>\n30.000+ Canlı yayın dinleniyor...")
+    send_telegram("📦 <b>Hazine Sandığı Radarı Aktif!</b>\nSadece TikTok hazine sandıkları taranıyor...")
     session = requests.Session()
 
     while True:
@@ -129,7 +151,7 @@ async def run_bot():
 
             ws = await connect_ws(ws_url, ws_headers)
             async with ws:
-                logging.info("✅ Canlı WebSocket bağlı! Sandıklar yakalanıyor...")
+                logging.info("✅ Canlı WebSocket bağlı! Sadece Hazine Sandıkları dinleniyor...")
                 while True:
                     msg = await ws.recv()
                     try:
@@ -143,6 +165,12 @@ async def run_bot():
 
                         if msg_type == "demoEvents" and isinstance(raw.get("events"), list):
                             for item in raw["events"]:
+                                event_type = item.get("type", "box")
+
+                                # GOODY BAG'LERİ ELER (Sadece sandıklar geçer)
+                                if event_type == "goody_bag":
+                                    continue
+
                                 username = item.get("uniqueId")
                                 if not username:
                                     continue
@@ -152,24 +180,16 @@ async def run_bot():
                                     continue
 
                                 timestamp = item.get("timestamp", 0)
-                                key = f"{username}:{coins}:{timestamp}"
+                                key = f"box:{username}:{coins}:{timestamp}"
 
-                                # Hafıza içi mükerrer kontrolü
-                                if key in PROCESSED_KEYS:
+                                if is_seen(key):
                                     continue
-                                PROCESSED_KEYS.add(key)
-                                if len(PROCESSED_KEYS) > 10000:
-                                    PROCESSED_KEYS.clear()
 
                                 can_open = item.get("canOpen", 0)
                                 viewers = item.get("viewerCount", 0)
-                                level = item.get("level", 0)
                                 b_type = item.get("businessType", 0)
-                                event_type = item.get("type", "box")
 
-                                if event_type == "goody_bag":
-                                    box_name = f"🎁 GOODY BAG (Lvl {level})"
-                                elif b_type == 4:
+                                if b_type == 4:
                                     box_name = "👑 ALTIN SANDIK"
                                 else:
                                     box_name = "📦 HAZİNE SANDIĞI"
@@ -187,7 +207,7 @@ async def run_bot():
                                     f"⚡ <a href='{live_link}'>YAYINA GİT</a>"
                                 )
                                 send_telegram(mesaj)
-                                logging.info(f"🔥 TELEGRAMA İLETİLDİ: @{username} ({coins} Coin)")
+                                logging.info(f"📦 SANDIK İLETİLDİ: @{username} ({coins} Coin)")
 
                     except Exception as err:
                         logging.error(f"Ayrıştırma hatası: {err}")
