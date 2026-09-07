@@ -10,6 +10,7 @@ import websockets
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
+# Render Ortam Değişkenleri
 TELEGRAM_BOT_TOKEN = (os.getenv("BOT_TOKEN") or "").strip()
 CHAT_ID = (os.getenv("CHAT_ID") or "").strip()
 MIN_COINS = int((os.getenv("MIN_COINS") or "5").strip())
@@ -50,90 +51,52 @@ FETCH_HEADERS = {
 }
 
 LOCAL_KEYS = set()
-LIVE_BOXES = []  # Web sitesinde gösterilecek aktif sandık havuzu
+LIVE_BOXES = []
 
 HTML_PAGE = """<!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hazine Sandığı Radarı</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #f8fafc; margin: 0; padding: 15px; }
-        .header { text-align: center; margin-bottom: 20px; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 15px; }
-        .card { background: #1e293b; border-radius: 12px; padding: 16px; border: 1px solid #334155; position: relative; }
-        .card.gold { border-color: #eab308; background: #232215; }
-        .title { font-weight: bold; font-size: 1.1rem; margin-bottom: 8px; color: #38bdf8; }
-        .gold .title { color: #facc15; }
-        .timer { font-size: 1.8rem; font-weight: bold; font-family: monospace; color: #4ade80; text-align: center; margin: 10px 0; }
-        .btn { display: block; text-align: center; background: #2563eb; color: white; text-decoration: none; padding: 10px; border-radius: 8px; font-weight: bold; margin-top: 10px; }
-        .btn:hover { background: #1d4ed8; }
-    </style>
+    <title>Radar</title>
 </head>
-<body>
-    <div class="header">
-        <h2>📦 Hazine Sandığı Canlı Radar</h2>
-        <p style="color: #94a3b8; font-size: 0.9rem;">Aktif sandıklar canlı olarak geriye sayar.</p>
-    </div>
-    <div class="grid" id="boxGrid"></div>
-
-    <script>
-        async function updateData() {
-            try {
-                const res = await fetch('/api/boxes');
-                const boxes = await res.json();
-                const grid = document.getElementById('boxGrid');
-                const now = Math.floor(Date.now() / 1000);
-                grid.innerHTML = '';
-
-                boxes.forEach(b => {
-                    const rem = Math.max(0, b.target_time - now);
-                    if (rem <= 0) return;
-                    const mins = String(Math.floor(rem / 60)).padStart(2, '0');
-                    const secs = String(rem % 60).padStart(2, '0');
-
-                    const card = document.createElement('div');
-                    card.className = b.is_gold ? 'card gold' : 'card';
-                    card.innerHTML = `
-                        <div class="title">${b.box_name}</div>
-                        <div>👤 <b>Yayıncı:</b> @${b.username}</div>
-                        <div>💎 <b>Coin:</b> ${b.coins}</div>
-                        <div>👥 <b>Kişi:</b> ${b.can_open} | 👁️ <b>İzleyici:</b> ${b.viewers}</div>
-                        <div class="timer">${mins}:${secs}</div>
-                        <a href="https://www.tiktok.com/@${b.username}/live" target="_blank" class="btn">YAYINA GİT</a>
-                    `;
-                    grid.appendChild(card);
-                });
-            } catch(e) {}
-        }
-        setInterval(updateData, 1000);
-        updateData();
-    </script>
+<body style="background:#0b0f19;color:#fff;font-family:sans-serif;text-align:center;padding:20px;">
+    <h2>📦 Radar Servisi Aktif</h2>
+    <p>Google Sites üzerinden canlı izleme yapabilirsiniz.</p>
 </body>
-</html>
-"""
+</html>"""
 
 class LiveDashboardHandler(BaseHTTPRequestHandler):
     def do_GET(self):
-        if self.path == "/" or self.path == "/index.html":
+        if self.path in ("/", "/index.html"):
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(HTML_PAGE.encode("utf-8"))
-        elif self.path == "/api/boxes":
+        elif self.path.startswith("/api/boxes"):
             now = int(time.time())
-            # Süresi dolmuş sandıkları listeden temizle
             global LIVE_BOXES
             LIVE_BOXES = [b for b in LIVE_BOXES if b["target_time"] > now]
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", "*")
             self.end_headers()
             self.wfile.write(json.dumps(LIVE_BOXES).encode("utf-8"))
         else:
             self.send_response(200)
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
             self.wfile.write(b"OK")
+
+    def do_OPTIONS(self):
+        self.send_response(200)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "*")
+        self.end_headers()
 
     def do_HEAD(self):
         self.send_response(200)
@@ -202,7 +165,7 @@ async def connect_ws(ws_url, ws_headers):
             return await websockets.connect(ws_url, ping_interval=None, ping_timeout=None)
 
 async def run_bot():
-    send_telegram("📦 <b>Hazine Sandığı Radarı Aktif!</b>\nCanlı Panel: https://hazinesandigi-1.onrender.com")
+    send_telegram("📦 <b>Hazine Sandığı Radarı Aktif!</b>\n33.000 canlı yayın taranıyor...")
     session = requests.Session()
 
     while True:
@@ -255,8 +218,7 @@ async def run_bot():
                                 if is_seen(key):
                                     continue
 
-                                # Logda tüm paketi incelemek için:
-                                logging.info(f"HAM SANDIK PAKETİ: {item}")
+                                logging.info(f"HAM PAKET: {item}")
 
                                 can_open = item.get("canOpen", 0)
                                 viewers = item.get("viewerCount", 0)
@@ -264,11 +226,9 @@ async def run_bot():
                                 is_gold = (b_type == 4)
                                 box_name = "👑 ALTIN SANDIK" if is_gold else "📦 HAZİNE SANDIĞI"
 
-                                # Varsayılan 3 dakika (180 sn) ileri hedef koyar (log verisi geldikten sonra tam süreye bağlanacaktır)
                                 duration = int(item.get("duration") or item.get("leftTime") or 180)
                                 target_time = int(time.time()) + duration
 
-                                # Canlı Web Sitesi Listesine Ekle
                                 LIVE_BOXES.append({
                                     "username": username,
                                     "coins": coins,
