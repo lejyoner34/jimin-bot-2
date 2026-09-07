@@ -105,7 +105,7 @@ def get_ticket(session):
         "transport": "ws",
         "mode": "bootstrap",
         "stream": "all",
-        "live": "30000"
+        "live": "33000"
     }
     res = session.post(PROXY_URL, params=params, headers=FETCH_HEADERS, timeout=10)
     try:
@@ -126,7 +126,7 @@ async def connect_ws(ws_url, ws_headers):
             return await websockets.connect(ws_url, ping_interval=20, ping_timeout=20)
 
 async def run_bot():
-    send_telegram("📦 <b>Hazine Sandığı Radarı Aktif!</b>\nSadece TikTok hazine sandıkları taranıyor...")
+    send_telegram("📦 <b>Hazine Sandığı Radarı Aktif!</b>\n33.000 canlı yayın taranıyor...")
     session = requests.Session()
 
     while True:
@@ -198,13 +198,14 @@ async def run_bot():
                                 viewers_str = f"👁️ <b>İzleyici:</b> {viewers}\n" if viewers else ""
                                 people_str = f"👥 <b>Kişi Sayısı:</b> {can_open}\n" if can_open else ""
 
+                                # Sadece saf link yönlendirmesi
                                 mesaj = (
                                     f"✨ <b>{box_name}</b>\n\n"
                                     f"👤 <b>Yayıncı:</b> @{username}\n"
                                     f"💎 <b>Coin:</b> {coins}\n"
                                     f"{people_str}"
                                     f"{viewers_str}\n"
-                                    f"⚡ <a href='{live_link}'>YAYINA GİT</a>"
+                                    f"{live_link}"
                                 )
                                 send_telegram(mesaj)
                                 logging.info(f"📦 SANDIK İLETİLDİ: @{username} ({coins} Coin)")
