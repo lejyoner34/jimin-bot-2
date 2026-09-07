@@ -2,6 +2,7 @@ import os
 import json
 import asyncio
 import logging
+import time
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
 import requests
@@ -9,7 +10,6 @@ import websockets
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
-# Render Ortam Değişkenleri
 TELEGRAM_BOT_TOKEN = (os.getenv("BOT_TOKEN") or "").strip()
 CHAT_ID = (os.getenv("CHAT_ID") or "").strip()
 MIN_COINS = int((os.getenv("MIN_COINS") or "5").strip())
@@ -51,12 +51,14 @@ FETCH_HEADERS = {
 
 LOCAL_KEYS = set()
 
-# Render Web Service port kontrolü için HTTP sunucu
 class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.end_headers()
         self.wfile.write(b"OK")
+    def do_HEAD(self):
+        self.send_response(200)
+        self.end_headers()
     def log_message(self, format, *args):
         pass
 
@@ -118,12 +120,12 @@ def get_ticket(session):
 
 async def connect_ws(ws_url, ws_headers):
     try:
-        return await websockets.connect(ws_url, additional_headers=ws_headers, ping_interval=20, ping_timeout=20)
+        return await websockets.connect(ws_url, additional_headers=ws_headers, ping_interval=None, ping_timeout=None)
     except TypeError:
         try:
-            return await websockets.connect(ws_url, extra_headers=ws_headers, ping_interval=20, ping_timeout=20)
+            return await websockets.connect(ws_url, extra_headers=ws_headers, ping_interval=None, ping_timeout=None)
         except TypeError:
-            return await websockets.connect(ws_url, ping_interval=20, ping_timeout=20)
+            return await websockets.connect(ws_url, ping_interval=None, ping_timeout=None)
 
 async def run_bot():
     send_telegram("📦 <b>Hazine Sandığı Radarı Aktif!</b>\n33.000 canlı yayın taranıyor...")
@@ -167,7 +169,6 @@ async def run_bot():
                             for item in raw["events"]:
                                 event_type = item.get("type", "box")
 
-                                # GOODY BAG'LERİ ELER (Sadece sandıklar geçer)
                                 if event_type == "goody_bag":
                                     continue
 
@@ -179,32 +180,38 @@ async def run_bot():
                                 if coins < MIN_COINS:
                                     continue
 
-                                timestamp = item.get("timestamp", 0)
-                                key = f"box:{username}:{coins}:{timestamp}"
+                                raw_ts = item.get("timestamp", 0)
+                                key = f"box:{username}:{coins}:{raw_ts}"
 
                                 if is_seen(key):
                                     continue
+
+                                # Kalan Süre Hesaplama
+                                sure_str = ""
+                                if raw_ts:
+                                    target = raw_ts / 1000 if raw_ts > 10_000_000_000 else float(raw_ts)
+                                    rem = int(target - time.time())
+                                    if rem > 0:
+                                        sure_str = f"⏳ <b>Kalan Süre:</b> {rem // 60:02d}:{rem % 60:02d}\n"
+                                    else:
+                                        sure_str = "⏳ <b>Kalan Süre:</b> Açılmak Üzere\n"
 
                                 can_open = item.get("canOpen", 0)
                                 viewers = item.get("viewerCount", 0)
                                 b_type = item.get("businessType", 0)
 
-                                if b_type == 4:
-                                    box_name = "👑 ALTIN SANDIK"
-                                else:
-                                    box_name = "📦 HAZİNE SANDIĞI"
-
+                                box_name = "👑 ALTIN SANDIK" if b_type == 4 else "📦 HAZİNE SANDIĞI"
                                 live_link = f"https://www.tiktok.com/@{username}/live"
                                 viewers_str = f"👁️ <b>İzleyici:</b> {viewers}\n" if viewers else ""
                                 people_str = f"👥 <b>Kişi Sayısı:</b> {can_open}\n" if can_open else ""
 
-                                # Sadece saf link yönlendirmesi
                                 mesaj = (
                                     f"✨ <b>{box_name}</b>\n\n"
                                     f"👤 <b>Yayıncı:</b> @{username}\n"
                                     f"💎 <b>Coin:</b> {coins}\n"
                                     f"{people_str}"
-                                    f"{viewers_str}\n"
+                                    f"{viewers_str}"
+                                    f"{sure_str}\n"
                                     f"{live_link}"
                                 )
                                 send_telegram(mesaj)
